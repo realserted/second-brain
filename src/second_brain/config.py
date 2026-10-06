@@ -16,6 +16,7 @@ def _env(name: str, default: str) -> str:
 class Settings:
     db_path: Path
     docs_dir: Path
+    wiki_dir: Path         # LLM wiki maintained by Claude Code (see docs/wiki-schema.md)
     embedder: str          # "fastembed" (real model) or "hash" (offline tests)
     embed_model: str
     chunk_size: int
@@ -29,6 +30,7 @@ class Settings:
         return cls(
             db_path=Path(_env("DB", "data/second_brain.db")),
             docs_dir=Path(_env("DOCS", "data/docs")),
+            wiki_dir=Path(_env("WIKI", "wiki")),
             embedder=_env("EMBEDDER", "fastembed"),
             embed_model=_env("EMBED_MODEL", "BAAI/bge-small-en-v1.5"),
             chunk_size=int(_env("CHUNK_SIZE", "900")),

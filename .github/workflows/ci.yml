@@ -24,6 +24,8 @@ jobs:
       - run: pip install -e ".[dev]"
       - name: Unit and integration tests (offline hash embedder)
         run: pytest -q
+      - name: Wiki checks (PII, links, frontmatter)
+        run: python -m second_brain.wiki check --wiki wiki --docs data/docs
 
   retrieval-evals:
     needs: tests

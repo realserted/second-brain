@@ -251,3 +251,31 @@ def test_status_without_index_exits_2_and_creates_nothing(tmp_path, monkeypatch)
     monkeypatch.setenv("SECOND_BRAIN_DB", str(tmp_path / "missing.db"))
     assert main(["status", "--wiki", str(tmp_path / "wiki")]) == 2
     assert not (tmp_path / "missing.db").exists()
+
+
+# ---- final review fixes ------------------------------------------------
+
+
+def test_no_issue_echoes_pii_values(wiki):
+    write(wiki, "entities/219-09-9994.md",
+          "---\ntype: 'SSN 219-09-9996'\nsources: [219-09-9995]\nupdated: 2026-10-06\n---\n"
+          "[[219-09-9998]] (219-09-9997.md) [[ZEBRA-CANARY]]\n")
+    issues = run(wiki, canaries=["ZEBRA-CANARY"])
+    assert any("ssn" in e.message for e in errors(issues))
+    planted = ["219-09-9994", "219-09-9995", "219-09-9996", "219-09-9997", "219-09-9998", "zebra-canary"]
+    for issue in issues:
+        for value in planted:
+            assert value not in issue.message.lower() and value not in issue.page.lower()
+
+
+def test_files_outside_pages_are_pii_scanned(wiki):
+    write(wiki, ".trash/old.md", "SSN 219-09-9999")
+    write(wiki, "notes.txt", "card 4111 1111 1111 1111")
+    (wiki / "diagram.png").write_bytes(b"\x89PNG\r\n\x1a\n\xff\xfe")
+    assert {e.page for e in errors(run(wiki))} == {".trash/old.md", "notes.txt"}
+
+
+def test_escaped_pipe_alias_in_tables_resolves(wiki):
+    write(wiki, "entities/jordan-reyes.md",
+          page("entity", f"| Who | Source |\n|---|---|\n| [[apartment-lease\|Lease]] | ({LEASE}) |"))
+    assert errors(run(wiki)) == []

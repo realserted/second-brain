@@ -11,3 +11,5 @@ data/private/
 .mcp.json
 # Obsidian's per-machine vault settings
 .obsidian/
+# Obsidian's deleted-notes folder
+.trash/

@@ -54,7 +54,7 @@ class Issue:
 def link_name(target: str) -> str:
     """Normalise a link target the way Obsidian resolves it: last path segment,
     no .md suffix, case-insensitive."""
-    name = target.strip().replace("\\", "/").split("/")[-1]
+    name = target.strip().rstrip("\\").replace("\\", "/").split("/")[-1]   # [[x\|y]] in tables
     return (name[:-3] if name.lower().endswith(".md") else name).lower()
 
 
@@ -151,7 +151,10 @@ def check(wiki: Path, docs: Path, redactor: Redactor, canaries: Iterable[str] = 
 
     present = {p.rel for p in pages}
     issues += [Issue("warning", name, "missing") for name in SPECIAL_PAGES if name not in present]
-    return issues
+    issues += _other_file_issues(wiki, present, redactor, canaries)
+    # Messages and paths quote page content; scrub them so a report never leaks a value.
+    return [Issue(i.severity, _scrub(i.page, redactor, canaries), _scrub(i.message, redactor, canaries))
+            for i in issues]
 
 
 @dataclass(frozen=True)
@@ -180,12 +183,41 @@ def status(pages: Sequence[Page], documents: Sequence[dict]) -> list[DocStatus]:
 
 
 def _pii_issues(page: Page, redactor: Redactor, canaries: list[str]) -> list[Issue]:
+    return _text_pii_issues(page.rel, page.text, redactor, canaries)
+
+
+def _text_pii_issues(rel: str, text: str, redactor: Redactor, canaries: list[str]) -> list[Issue]:
     # Name the category only; echoing the value would leak it into logs.
-    found = sorted(redactor.redact(page.text).counts)
-    issues = [Issue("error", page.rel, f"contains {', '.join(found)} that ingest would redact")] if found else []
-    if any(c in page.text for c in canaries):
-        issues.append(Issue("error", page.rel, "contains an eval canary value"))
+    scanned = f"{rel}\n{text}"     # file names can leak too
+    found = sorted(redactor.redact(scanned).counts)
+    issues = [Issue("error", rel, f"contains {', '.join(found)} that ingest would redact")] if found else []
+    if any(c.lower() in scanned.lower() for c in canaries):
+        issues.append(Issue("error", rel, "contains an eval canary value"))
     return issues
+
+
+def _other_file_issues(wiki: Path, pages: set[str], redactor: Redactor,
+                       canaries: list[str]) -> list[Issue]:
+    """PII-scan every other text file (.trash/, .txt, .canvas...). Only Obsidian's
+    own settings folder is skipped; binary files can't hold readable PII."""
+    issues: list[Issue] = []
+    for path in sorted(wiki.rglob("*")):
+        rel = path.relative_to(wiki).as_posix()
+        if not path.is_file() or rel in pages or rel.split("/")[0] == ".obsidian":
+            continue
+        try:
+            text = path.read_text(encoding="utf-8-sig")
+        except (UnicodeDecodeError, OSError):
+            continue
+        issues += _text_pii_issues(rel, text, redactor, canaries)
+    return issues
+
+
+def _scrub(text: str, redactor: Redactor, canaries: list[str]) -> str:
+    text = redactor.redact(text).text
+    for canary in canaries:
+        text = re.sub(re.escape(canary), "[CANARY]", text, flags=re.IGNORECASE)
+    return text
 
 
 def _log_issues(page: Page) -> list[Issue]:

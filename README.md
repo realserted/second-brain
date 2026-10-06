@@ -100,7 +100,7 @@ Inspired by [Karpathy's LLM Wiki](https://gist.github.com/karpathy/442a6bf555914
 - **Ask questions:** Claude checks the wiki first, confirms against the index, and offers to file new answers (it asks before writing).
 - **Lint:** "lint the wiki" finds contradictions, expired dates, orphans and missing pages.
 
-`python -m second_brain.wiki check` validates any wiki with no LLM involved: no PII, no broken links, valid frontmatter, real citations. CI runs it on `wiki/`, the example built from `data/docs`. For your own documents set `SECOND_BRAIN_WIKI` to a folder outside the repo. Rules: [docs/wiki-schema.md](docs/wiki-schema.md).
+`python -m second_brain.wiki check` validates any wiki with no LLM involved: no PII (including values redacted from your documents, in any format), no broken links, valid frontmatter, real citations. CI runs it on `wiki/`, the example built from `data/docs`. For your own documents set `SECOND_BRAIN_WIKI` to a folder outside the repo. Rules: [docs/wiki-schema.md](docs/wiki-schema.md).
 
 ## Evals
 

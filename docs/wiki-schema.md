@@ -17,7 +17,11 @@ Which wiki: `SECOND_BRAIN_WIKI` (default `wiki/`, the committed example built fr
   `Rent is $1,450/month (leases/apartment-lease.md)`.
 - Don't invent facts. If documents disagree, say so on the page and cite both.
 - Run `python -m second_brain.wiki check` after every change. Finish only when it
-  reports 0 errors.
+  reports 0 errors. Besides the redaction rules it searches every wiki file for the
+  values ingest removed from your documents, in any spacing or punctuation; those
+  values stay in memory and are never printed.
+- Images can be embedded with `![[file.png]]`. Keep other binary files (PDFs, office
+  documents) out of the wiki: `check` can't scan them for PII and reports them as errors.
 
 ## Layout
 

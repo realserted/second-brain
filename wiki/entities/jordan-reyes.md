@@ -5,7 +5,7 @@ updated: 2026-10-06
 ---
 # Jordan Reyes
 
-The person all of these documents belong to.
+Named in the lease, the freelance contract, the internet agreement, the auto policy and the gym membership.
 
 ## Roles
 - Tenant of Unit 4B at [[1420-alder-street]] under the [[apartment-lease]] (leases/apartment-lease.md)

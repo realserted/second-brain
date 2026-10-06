@@ -289,3 +289,75 @@ def test_utf16_text_file_is_still_pii_scanned(wiki):
 def test_unreadable_non_image_file_fails_closed(wiki):
     (wiki / "scan.pdf").write_bytes(b"%PDF-1.4\n\xff\xfe\x00 binary")
     assert any(e.page == "scan.pdf" and "PII" in e.message for e in errors(run(wiki)))
+
+
+# ---- follow-ups after PR #1 --------------------------------------------
+
+
+def test_embedded_attachments_resolve(wiki):
+    (wiki / "assets").mkdir()
+    (wiki / "assets" / "scan.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    write(wiki, "entities/jordan-reyes.md", page("entity", f"![[scan.png]] [[apartment-lease]] ({LEASE})"))
+    assert errors(run(wiki)) == []
+
+
+def test_missing_attachment_is_a_broken_link(wiki):
+    write(wiki, "entities/jordan-reyes.md", page("entity", f"![[missing.png]] [[apartment-lease]] ({LEASE})"))
+    assert [e.message for e in errors(run(wiki))] == ["broken link [[missing.png]]"]
+
+
+def test_links_inside_code_are_ignored(wiki):
+    body = f"Use `[[page-name]]` to link.\n\n```\n[[also-not-a-link]]\n```\n[[apartment-lease]] ({LEASE})"
+    write(wiki, "entities/jordan-reyes.md", page("entity", body))
+    assert errors(run(wiki)) == []
+
+
+def test_reformatted_canary_is_caught(wiki):
+    write(wiki, "entities/jordan-reyes.md", page("entity", f"Acct 0001 2345 6789 ({LEASE}) [[apartment-lease]]"))
+    issues = run(wiki, canaries=["000123456789"])
+    assert any("canary" in e.message for e in errors(issues))
+    assert all("0001 2345 6789" not in i.message for i in issues)
+
+
+def test_values_redacted_from_docs_are_caught_in_any_format(wiki, tmp_path):
+    docs = tmp_path / "docs"
+    write(docs, "bank/statement.md", "Account number: 5551234567\n")
+    write(wiki, "entities/jordan-reyes.md",
+          page("entity", "Acct 555-123-4567 (bank/statement.md) [[apartment-lease]]", sources="[bank/statement.md]"))
+    write(wiki, "sources/apartment-lease.md", page(
+        "source", "Statement (bank/statement.md). [[jordan-reyes]]", sources="[bank/statement.md]",
+        extra="indexed_at: '2026-10-06T03:36:51.662657+00:00'\n"))
+    issues = check(wiki, docs, Redactor(DEFAULT_REDACTIONS.split(",")))
+    assert any(e.page == "entities/jordan-reyes.md" and "redacted from your documents" in e.message
+               for e in errors(issues))
+    assert all("555" not in i.message for i in issues)
+
+
+def test_empty_frontmatter_is_reported_as_not_a_mapping(wiki):
+    write(wiki, "entities/jordan-reyes.md", f"---\n---\n[[apartment-lease]] ({LEASE})\n")
+    assert any("must be a YAML mapping" in e.message for e in errors(run(wiki)))
+
+
+def test_two_source_pages_for_one_document_is_an_error(wiki):
+    write(wiki, "sources/lease-copy.md", page(
+        "source", f"[[jordan-reyes]] ({LEASE})", extra="indexed_at: '2026-10-06T03:36:51.662657+00:00'\n"))
+    assert any("also covered by sources/apartment-lease.md" in e.message for e in errors(run(wiki)))
+
+
+def test_uppercase_md_extension_is_a_page(wiki):
+    write(wiki, "entities/UPPER.MD", "no frontmatter [[apartment-lease]]\n")
+    assert any(e.page == "entities/UPPER.MD" and "missing frontmatter" in e.message for e in errors(run(wiki)))
+
+
+def test_frontmatter_errors_do_not_echo_values(wiki):
+    write(wiki, "entities/jordan-reyes.md", page("Jane Doe at 9 Elm Road", f"[[apartment-lease]] ({LEASE})"))
+    messages = [e.message for e in errors(run(wiki))]
+    assert any("type must be one of" in m for m in messages)
+    assert all("Jane" not in m and "Elm" not in m for m in messages)
+
+
+def test_cli_golden_option_supplies_canaries(wiki, tmp_path):
+    golden = tmp_path / "golden.yaml"
+    golden.write_text("pii_canaries: ['ZEBRA-77']\n", encoding="utf-8")
+    write(wiki, "entities/jordan-reyes.md", page("entity", f"ZEBRA-77 [[apartment-lease]] ({LEASE})"))
+    assert main(["check", "--wiki", str(wiki), "--docs", str(DOCS), "--golden", str(golden)]) == 1

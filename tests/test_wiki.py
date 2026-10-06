@@ -279,3 +279,13 @@ def test_escaped_pipe_alias_in_tables_resolves(wiki):
     write(wiki, "entities/jordan-reyes.md",
           page("entity", f"| Who | Source |\n|---|---|\n| [[apartment-lease\|Lease]] | ({LEASE}) |"))
     assert errors(run(wiki)) == []
+
+
+def test_utf16_text_file_is_still_pii_scanned(wiki):
+    (wiki / "notes.txt").write_bytes("SSN 219-09-9999".encode("utf-16"))
+    assert [e.page for e in errors(run(wiki))] == ["notes.txt"]
+
+
+def test_unreadable_non_image_file_fails_closed(wiki):
+    (wiki / "scan.pdf").write_bytes(b"%PDF-1.4\n\xff\xfe\x00 binary")
+    assert any(e.page == "scan.pdf" and "PII" in e.message for e in errors(run(wiki)))

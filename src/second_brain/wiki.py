@@ -198,19 +198,38 @@ def _text_pii_issues(rel: str, text: str, redactor: Redactor, canaries: list[str
 
 def _other_file_issues(wiki: Path, pages: set[str], redactor: Redactor,
                        canaries: list[str]) -> list[Issue]:
-    """PII-scan every other text file (.trash/, .txt, .canvas...). Only Obsidian's
-    own settings folder is skipped; binary files can't hold readable PII."""
+    """PII-scan every other file (.trash/, .txt, .canvas...). Only Obsidian's own
+    settings folder and images are skipped; anything else that can't be read as
+    text is an error, so the scan fails closed."""
     issues: list[Issue] = []
     for path in sorted(wiki.rglob("*")):
         rel = path.relative_to(wiki).as_posix()
         if not path.is_file() or rel in pages or rel.split("/")[0] == ".obsidian":
             continue
-        try:
-            text = path.read_text(encoding="utf-8-sig")
-        except (UnicodeDecodeError, OSError):
+        if path.suffix.lower() in _IMAGE_SUFFIXES:
+            continue
+        text = _read_text(path)
+        if text is None:
+            issues.append(Issue("error", rel, "can't be read as text, so it can't be checked for PII; "
+                                              "keep only markdown, text and images in the wiki"))
             continue
         issues += _text_pii_issues(rel, text, redactor, canaries)
     return issues
+
+
+_IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico"})
+
+
+def _read_text(path: Path) -> str | None:
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return None
+    encoding = "utf-16" if raw[:2] in (b"\xff\xfe", b"\xfe\xff") else "utf-8-sig"  # Notepad "Unicode"
+    try:
+        return raw.decode(encoding)
+    except UnicodeDecodeError:
+        return None
 
 
 def _scrub(text: str, redactor: Redactor, canaries: list[str]) -> str:

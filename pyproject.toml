@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "second-brain"
+version = "0.1.0"
+description = "Local RAG over personal documents, exposed to Claude as an MCP server, with PII redaction and evals in CI."
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=2.3,<3",
+    "sqlite-vec>=0.1.6",
+    "fastembed>=0.4",
+    "pypdf>=4.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "reportlab>=4"]
+judge = ["anthropic>=0.40"]
+
+[project.scripts]
+second-brain-ingest = "second_brain.ingest:main"
+second-brain-server = "second_brain.server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]

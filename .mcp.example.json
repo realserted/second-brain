@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "second-brain": {
+      "type": "stdio",
+      "command": "/ABSOLUTE/PATH/TO/second-brain/.venv/bin/python",
+      "args": ["-m", "second_brain.server"],
+      "env": {
+        "SECOND_BRAIN_DB": "/ABSOLUTE/PATH/TO/second-brain/data/second_brain.db",
+        "SECOND_BRAIN_DOCS": "/ABSOLUTE/PATH/TO/second-brain/data/docs",
+        "SECOND_BRAIN_MIN_SCORE": "0.56"
+      }
+    }
+  }
+}

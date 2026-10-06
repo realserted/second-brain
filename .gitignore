@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.fastembed_cache/
+.env
+*.db
+# Keep real personal documents out of git. Only the synthetic set is committed.
+data/private/
+# Machine-specific MCP config (absolute paths). Commit .mcp.example.json instead.
+.mcp.json

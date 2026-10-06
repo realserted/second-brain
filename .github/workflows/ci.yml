@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      judge:
+        description: "Also run the LLM-as-judge evals (uses Anthropic API credits)"
+        type: boolean
+        default: false
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e ".[dev]"
+      - name: Unit and integration tests (offline hash embedder)
+        run: pytest -q
+
+  retrieval-evals:
+    needs: tests
+    runs-on: ubuntu-latest
+    env:
+      FASTEMBED_CACHE_PATH: ${{ github.workspace }}/.fastembed_cache
+      # Tune this from the calibration step's output (see README).
+      SECOND_BRAIN_MIN_SCORE: "0.56"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - uses: actions/cache@v4
+        with:
+          path: .fastembed_cache
+          key: fastembed-bge-small-en-v1.5
+      - run: pip install -e .
+      - name: Score distribution (informational)
+        run: python evals/run_evals.py --calibrate
+      - name: Retrieval evals (gating)
+        run: python evals/run_evals.py
+
+  judge-evals:
+    if: github.event_name == 'workflow_dispatch' && inputs.judge
+    needs: retrieval-evals
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      FASTEMBED_CACHE_PATH: ${{ github.workspace }}/.fastembed_cache
+      SECOND_BRAIN_MIN_SCORE: "0.56"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - uses: actions/cache@v4
+        with:
+          path: .fastembed_cache
+          key: fastembed-bge-small-en-v1.5
+      - run: pip install -e ".[judge]"
+      - name: End-to-end answer quality (LLM-as-judge)
+        run: python evals/judge.py

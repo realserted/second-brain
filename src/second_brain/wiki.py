@@ -10,7 +10,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Sequence
 
 import yaml
 
@@ -148,6 +148,31 @@ def check(wiki: Path, docs: Path, redactor: Redactor, canaries: Iterable[str] = 
     present = {p.rel for p in pages}
     issues += [Issue("warning", name, "missing") for name in SPECIAL_PAGES if name not in present]
     return issues
+
+
+@dataclass(frozen=True)
+class DocStatus:
+    source: str
+    state: str                     # "new": no source page; "changed": re-indexed since the page was written
+
+
+def status(pages: Sequence[Page], documents: Sequence[dict]) -> list[DocStatus]:
+    """Indexed documents the wiki hasn't caught up with. A source page belongs to
+    the first document in its `sources`; its indexed_at must equal that document's
+    current ingested_at."""
+    written: dict[str, str | None] = {}
+    for p in pages:
+        fm = p.frontmatter or {}
+        sources = fm.get("sources")
+        if fm.get("type") == "source" and isinstance(sources, list) and sources:
+            written[str(sources[0])] = timestamp(fm.get("indexed_at"))
+    pending = []
+    for doc in sorted(documents, key=lambda d: d["source"]):
+        if doc["source"] not in written:
+            pending.append(DocStatus(doc["source"], "new"))
+        elif written[doc["source"]] != doc["ingested_at"]:
+            pending.append(DocStatus(doc["source"], "changed"))
+    return pending
 
 
 def _pii_issues(page: Page, redactor: Redactor, canaries: list[str]) -> list[Issue]:

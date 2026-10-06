@@ -169,3 +169,48 @@ def test_hidden_folders_are_ignored(wiki):
 def test_non_utf8_file_is_an_error_not_a_crash(wiki):
     (wiki / "entities" / "latin1.md").write_bytes(b"caf\xe9")
     assert any(e.page == "entities/latin1.md" and "UTF-8" in e.message for e in errors(run(wiki)))
+
+
+import shutil
+
+from second_brain.wiki import load_pages, parse_page, status
+
+
+def docs_list(**ingested):
+    return [{"source": s, "title": s, "ingested_at": at, "chunks": 1} for s, at in ingested.items()]
+
+
+def source_page(source: str, indexed_at: str, quoted: bool = True):
+    value = f"'{indexed_at}'" if quoted else indexed_at
+    return parse_page(f"sources/{Path(source).stem}.md",
+                      page("source", f"({source})", sources=f"[{source}]", extra=f"indexed_at: {value}\n"))
+
+
+AT = "2026-10-06T03:36:51.662657+00:00"
+LATER = "2026-10-07T09:00:00.000000+00:00"
+
+
+def test_status_reports_new_and_changed():
+    pages = [source_page(LEASE, AT), source_page("memberships/gym.md", AT)]
+    docs = docs_list(**{LEASE: AT, "memberships/gym.md": LATER, "notes/2026-goals.md": AT})
+    assert [(d.source, d.state) for d in status(pages, docs)] == [
+        ("memberships/gym.md", "changed"),
+        ("notes/2026-goals.md", "new"),
+    ]
+
+
+def test_status_accepts_unquoted_timestamps():
+    assert status([source_page(LEASE, AT, quoted=False)], docs_list(**{LEASE: AT})) == []
+
+
+def test_status_ignores_non_source_pages():
+    entity = parse_page("entities/x.md", page("entity", f"({LEASE})"))
+    assert [d.state for d in status([entity], docs_list(**{LEASE: AT}))] == ["new"]
+
+
+def test_status_against_a_real_index(brain, tmp_path):
+    shutil.copytree(DOCS, brain.settings.docs_dir, dirs_exist_ok=True)
+    brain.ingest()
+    pages, _ = load_pages(tmp_path / "no-wiki-yet")
+    pending = status(pages, brain.list_documents())
+    assert len(pending) == 7 and {d.state for d in pending} == {"new"}

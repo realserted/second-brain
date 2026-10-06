@@ -214,3 +214,40 @@ def test_status_against_a_real_index(brain, tmp_path):
     pages, _ = load_pages(tmp_path / "no-wiki-yet")
     pending = status(pages, brain.list_documents())
     assert len(pending) == 7 and {d.state for d in pending} == {"new"}
+
+
+from second_brain import SecondBrain
+from second_brain.wiki import main
+
+
+def test_cli_check_passes_clean_wiki(wiki, capsys):
+    assert main(["check", "--wiki", str(wiki), "--docs", str(DOCS)]) == 0
+    assert "0 errors" in capsys.readouterr().out
+
+
+def test_cli_check_fails_on_error(wiki, capsys):
+    write(wiki, "entities/jordan-reyes.md", page("entity", f"[[nobody]] [[apartment-lease]] ({LEASE})"))
+    assert main(["check", "--wiki", str(wiki), "--docs", str(DOCS)]) == 1
+    assert "broken link [[nobody]]" in capsys.readouterr().out
+
+
+def test_cli_check_missing_wiki_exits_2(tmp_path):
+    assert main(["check", "--wiki", str(tmp_path / "nope"), "--docs", str(DOCS)]) == 2
+
+
+def test_cli_status_lists_new_documents(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("SECOND_BRAIN_DB", str(tmp_path / "idx.db"))
+    monkeypatch.setenv("SECOND_BRAIN_DOCS", str(DOCS))
+    monkeypatch.setenv("SECOND_BRAIN_EMBEDDER", "hash")
+    brain = SecondBrain.from_env()
+    brain.ingest()
+    brain.close()
+    assert main(["status", "--wiki", str(tmp_path / "wiki")]) == 0
+    out = capsys.readouterr().out
+    assert out.count("new ") == 7 and "7 need ingest" in out
+
+
+def test_status_without_index_exits_2_and_creates_nothing(tmp_path, monkeypatch):
+    monkeypatch.setenv("SECOND_BRAIN_DB", str(tmp_path / "missing.db"))
+    assert main(["status", "--wiki", str(tmp_path / "wiki")]) == 2
+    assert not (tmp_path / "missing.db").exists()

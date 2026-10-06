@@ -9,3 +9,5 @@ __pycache__/
 data/private/
 # Machine-specific MCP config (absolute paths). Commit .mcp.example.json instead.
 .mcp.json
+# Obsidian's per-machine vault settings
+.obsidian/

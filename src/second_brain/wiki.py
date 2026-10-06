@@ -6,7 +6,9 @@ this module only validates it. No LLM calls, no network.
 """
 from __future__ import annotations
 
+import argparse
 import re
+import sys
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -14,10 +16,12 @@ from typing import Iterable, Sequence
 
 import yaml
 
+from .config import Settings
 from .redaction import Redactor
 
 PAGE_TYPES = ("answer", "entity", "source", "topic")
 SPECIAL_PAGES = ("index.md", "log.md")   # catalogue and history: no frontmatter needed
+GOLDEN = Path(__file__).resolve().parents[2] / "evals" / "golden.yaml"
 
 _FRONTMATTER = re.compile(r"\A---\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOTALL)
 _LINK = re.compile(r"\[\[([^\[\]|#]+)(?:#[^\[\]|]*)?(?:\|[^\[\]]*)?\]\]")
@@ -221,3 +225,71 @@ def _is_date(value: object) -> bool:
             return False
         return True
     return False
+
+
+# ---- CLI ---------------------------------------------------------------
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="python -m second_brain.wiki",
+        description="Validate the LLM wiki and list documents it hasn't caught up with.",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+    check_cmd = sub.add_parser("check", help="Validate PII, links, frontmatter and citations (read-only)")
+    check_cmd.add_argument("--wiki", type=Path, help="Wiki folder (default: SECOND_BRAIN_WIKI)")
+    check_cmd.add_argument("--docs", type=Path, help="Docs folder (default: SECOND_BRAIN_DOCS)")
+    status_cmd = sub.add_parser("status", help="List indexed documents the wiki is missing or behind on")
+    status_cmd.add_argument("--wiki", type=Path, help="Wiki folder (default: SECOND_BRAIN_WIKI)")
+    args = parser.parse_args(argv)
+
+    settings = Settings.from_env()
+    wiki = args.wiki or settings.wiki_dir
+    if args.command == "check":
+        return _run_check(wiki, args.docs or settings.docs_dir, settings)
+    return _run_status(wiki, settings)
+
+
+def _run_check(wiki: Path, docs: Path, settings: Settings) -> int:
+    for label, folder in (("Wiki", wiki), ("Docs", docs)):
+        if not folder.is_dir():
+            print(f"{label} folder not found: {folder.resolve()}", file=sys.stderr)
+            return 2
+    issues = check(wiki, docs, Redactor(settings.redact), _canaries())
+    for issue in issues:
+        print(f"{issue.severity.upper():7} {issue.page}: {issue.message}")
+    errors = sum(i.severity == "error" for i in issues)
+    pages, _ = load_pages(wiki)
+    print(f"wiki check: {len(pages)} pages, {errors} errors, {len(issues) - errors} warnings")
+    return 1 if errors else 0
+
+
+def _canaries() -> list[str]:
+    if not GOLDEN.is_file():
+        return []
+    golden = yaml.safe_load(GOLDEN.read_text(encoding="utf-8")) or {}
+    return [str(c) for c in golden.get("pii_canaries", [])]
+
+
+def _run_status(wiki: Path, settings: Settings) -> int:
+    if not settings.db_path.is_file():
+        print(f"Index not found: {settings.db_path.resolve()}. Run: python -m second_brain.ingest",
+              file=sys.stderr)
+        return 2
+    from .brain import SecondBrain   # loads the embedding model; only status needs it
+
+    brain = SecondBrain(settings)
+    try:
+        documents = brain.list_documents()
+    finally:
+        brain.close()
+    pages, _ = load_pages(wiki)
+    pending = status(pages, documents)
+    for doc in pending:
+        print(f"{doc.state:8} {doc.source}")
+    print(f"wiki status: {len(documents)} indexed, {len(pending)} need ingest")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

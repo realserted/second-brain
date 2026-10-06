@@ -9,6 +9,7 @@ Second Brain: local RAG over personal documents, served to Claude over MCP (stdi
 - Retrieval evals: `python evals/run_evals.py` (`--calibrate` prints score distribution)
 - Judge evals: `python evals/judge.py` (needs ANTHROPIC_API_KEY, costs money, never run automatically)
 - Server: `python -m second_brain.server`
+- Wiki: `python -m second_brain.wiki check` (no LLM, gated in CI) and `python -m second_brain.wiki status`
 
 ## Architecture
 - `brain.py`: `SecondBrain` facade. The CLI, MCP server and evals all go through it. Don't bypass it.
@@ -36,6 +37,12 @@ Second Brain: local RAG over personal documents, served to Claude over MCP (stdi
 
 ## Data
 - `data/docs/` holds synthetic documents only, with planted fake PII used as eval canaries. Never add real personal documents to the repo; point `SECOND_BRAIN_DOCS` at a folder outside it.
+
+## Wiki
+- The LLM wiki is maintained by Claude Code following `docs/wiki-schema.md`. Read it before touching any wiki.
+- Build wiki pages only from redacted text (MCP tools or `SecondBrain.get_document`), never from files under the docs folder.
+- Ask before filing an answer into the wiki.
+- `wiki/` is the committed example built from `data/docs`. Personal wikis live outside the repo via `SECOND_BRAIN_WIKI`.
 
 ## Style
 - Python 3.11+, type hints, frozen dataclasses for config, small modules, no new dependencies without a reason.

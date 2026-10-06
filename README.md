@@ -92,6 +92,16 @@ Run `python -m second_brain.ingest` with the same `SECOND_BRAIN_DB` before conne
 | `list_documents()` | Every indexed file with title and chunk count. |
 | `get_document(source)` | Full redacted text of one file. |
 
+## LLM wiki
+
+Inspired by [Karpathy's LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f): Claude Code turns your documents into linked markdown notes (sources, people and companies, topics, filed answers) that get better as you use them. Open the folder as a vault in [Obsidian](https://obsidian.md) to see the graph.
+
+- **Update the wiki:** ask Claude Code "update the wiki". It runs `python -m second_brain.wiki status`, reads the redacted text over MCP, and writes the pages.
+- **Ask questions:** Claude checks the wiki first, confirms against the index, and offers to file new answers (it asks before writing).
+- **Lint:** "lint the wiki" finds contradictions, expired dates, orphans and missing pages.
+
+`python -m second_brain.wiki check` validates any wiki with no LLM involved: no PII, no broken links, valid frontmatter, real citations. CI runs it on `wiki/`, the example built from `data/docs`. For your own documents set `SECOND_BRAIN_WIKI` to a folder outside the repo. Rules: [docs/wiki-schema.md](docs/wiki-schema.md).
+
 ## Evals
 
 ### Retrieval evals (`evals/run_evals.py`, every PR)
@@ -125,6 +135,7 @@ All optional, read from environment variables.
 |---|---|---|
 | `SECOND_BRAIN_DB` | `data/second_brain.db` | Index file |
 | `SECOND_BRAIN_DOCS` | `data/docs` | Folder to index |
+| `SECOND_BRAIN_WIKI` | `wiki` | LLM wiki folder |
 | `SECOND_BRAIN_EMBEDDER` | `fastembed` | `hash` is an offline lexical fallback used by tests |
 | `SECOND_BRAIN_EMBED_MODEL` | `BAAI/bge-small-en-v1.5` | Any fastembed text model |
 | `SECOND_BRAIN_CHUNK_SIZE` / `_OVERLAP` | `900` / `150` | Characters |
@@ -147,12 +158,14 @@ src/second_brain/
   brain.py        SecondBrain facade used by CLI, server, and evals
   ingest.py       CLI
   server.py       MCP server (mcp SDK 2.x MCPServer, stdio)
+  wiki.py         wiki checker and status (no LLM)
 evals/
   golden.yaml     cases, PII canaries, thresholds
   run_evals.py    deterministic retrieval evals (CI gate)
   judge.py        end-to-end LLM-as-judge evals
 tests/            pytest suite, runs offline with the hash embedder
 data/docs/        synthetic documents only
+wiki/             example LLM wiki built from data/docs
 ```
 
 ## Known limitations
